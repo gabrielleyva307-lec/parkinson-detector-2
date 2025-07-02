@@ -65,7 +65,7 @@ Abre tu navegador en `http://localhost:8501`
 ## 🌐 Aplicación Desplegada
 
 La aplicación está disponible en línea en:
-**[🔗 https://deteccion-parkinson.railway.app](https://web-production-1eaa5.up.railway.app/)**
+**[🔗https://deteccion-parkinson.railway.app](https://web-production-1eaa5.up.railway.app/)**
 
 ### Despliegue en Railway
 
