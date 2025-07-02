@@ -134,7 +134,6 @@ proyecto/
 ├── modelo_parkinson.h5        # Modelo entrenado de TensorFlow
 ├── Procfile                   # Configuración de despliegue Railway
 ├── requirements.txt           # Dependencias de Python
-├── runtime.txt               # Versión de Python para Railway
 └── README.md                 # Este archivo
 ```
 
