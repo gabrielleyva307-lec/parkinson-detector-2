@@ -24,7 +24,7 @@ def cargar_modelo():
 
 modelo = cargar_modelo()
 
-# Función de predicción
+# Función para predicción
 def predecir_imagen(imagen):
     img = imagen.convert("RGB").resize((224, 224))
     img_array = tf.keras.preprocessing.image.img_to_array(img)
@@ -46,6 +46,6 @@ if imagen_subida:
             st.error(f"🧠 Probabilidad de Parkinson detectada: {probabilidad*100:.2f}%")
         else:
             st.success(f"✅ Imagen saludable detectada: {(1 - probabilidad)*100:.2f}%")
-
+            
         st.markdown("---")
         st.markdown("**Nota:** Este resultado es orientativo y no sustituye una evaluación médica profesional.", unsafe_allow_html=True)
