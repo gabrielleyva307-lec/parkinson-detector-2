@@ -93,7 +93,7 @@ if pagina == "🔍 Análisis":
         
         if imagen_subida:
             imagen = Image.open(imagen_subida)
-            st.image(imagen, caption='Imagen cargada', use_container_width=True)
+            st.image(imagen, caption='Imagen cargada', use_column_width=True)
             
             if st.button("🔍 Predecir", type="primary", use_container_width=True):
                 if not nombre_paciente:
