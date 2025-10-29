@@ -3,8 +3,9 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 from datetime import datetime
-import json
 import hashlib
+import os
+from supabase import create_client, Client
 
 # Configuración de la página
 st.set_page_config(
@@ -20,9 +21,24 @@ if 'autenticado' not in st.session_state:
 if 'usuario_actual' not in st.session_state:
     st.session_state['usuario_actual'] = None
 
-# Credenciales de administrador (contraseña hasheada)
+# Credenciales de administrador
 ADMIN_PASSWORD = "12345678"
 ADMIN_PASSWORD_HASH = hashlib.sha256(ADMIN_PASSWORD.encode()).hexdigest()
+
+# Configurar Supabase
+@st.cache_resource
+def init_supabase() -> Client:
+    """Inicializa la conexión a Supabase"""
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_KEY")
+    
+    if not url or not key:
+        st.error("⚠️ Error: Credenciales de Supabase no configuradas")
+        st.stop()
+    
+    return create_client(url, key)
+
+supabase = init_supabase()
 
 # Cargar modelo
 @st.cache_resource
@@ -51,42 +67,46 @@ def cerrar_sesion():
     st.session_state['autenticado'] = False
     st.session_state['usuario_actual'] = None
 
-# Funciones de almacenamiento
+# Funciones de Supabase
 def guardar_prediccion(nombre, probabilidad, fecha_hora):
-    """Guarda una predicción en el historial"""
+    """Guarda una predicción en Supabase"""
     try:
-        resultado = st.session_state.get('historial_storage')
-        if resultado is None:
-            historial = []
-        else:
-            historial = json.loads(resultado)
-    except:
-        historial = []
-    
-    nueva_prediccion = {
-        "nombre": nombre,
-        "probabilidad": float(probabilidad),
-        "fecha_hora": fecha_hora,
-        "resultado": "Parkinson detectado" if probabilidad > 0.5 else "Saludable"
-    }
-    historial.append(nueva_prediccion)
-    st.session_state['historial_storage'] = json.dumps(historial)
-    return True
+        resultado = "Parkinson detectado" if probabilidad > 0.5 else "Saludable"
+        
+        data = {
+            "nombre": nombre,
+            "probabilidad": float(probabilidad),
+            "resultado": resultado,
+            "fecha_hora": fecha_hora
+        }
+        
+        response = supabase.table("predicciones").insert(data).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error al guardar: {str(e)}")
+        return False
 
 def obtener_historial():
-    """Obtiene el historial de predicciones"""
+    """Obtiene el historial de predicciones desde Supabase"""
     try:
-        resultado = st.session_state.get('historial_storage')
-        if resultado is None:
-            return []
-        return json.loads(resultado)
-    except:
+        response = supabase.table("predicciones").select("*").order("fecha_hora", desc=False).execute()
+        return response.data if response.data else []
+    except Exception as e:
+        st.error(f"Error al cargar historial: {str(e)}")
         return []
 
 def limpiar_historial():
-    """Limpia todo el historial"""
-    st.session_state['historial_storage'] = json.dumps([])
-    return True
+    """Limpia todo el historial en Supabase"""
+    try:
+        # Primero obtener todos los IDs
+        response = supabase.table("predicciones").select("id").execute()
+        if response.data:
+            for item in response.data:
+                supabase.table("predicciones").delete().eq("id", item["id"]).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error al limpiar historial: {str(e)}")
+        return False
 
 # Función para predicción
 def predecir_imagen(imagen):
@@ -181,19 +201,19 @@ if pagina == "🔍 Análisis":
                         probabilidad = predecir_imagen(imagen)
                         fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         
-                        guardar_prediccion(nombre_paciente, probabilidad, fecha_hora)
-                        
-                        st.markdown("---")
-                        if probabilidad > 0.5:
-                            st.error(f"🧠 **Probabilidad de Parkinson detectada: {probabilidad*100:.2f}%**")
-                            st.info(f"📅 Análisis realizado el {fecha_hora}")
-                        else:
-                            st.success(f"✅ **Imagen saludable detectada: {(1 - probabilidad)*100:.2f}%**")
-                            st.info(f"📅 Análisis realizado el {fecha_hora}")
-                        
-                        st.success("💾 Predicción guardada en el historial")
-                        st.markdown("---")
-                        st.markdown("**Nota:** Este resultado es orientativo y no sustituye una evaluación médica profesional.", unsafe_allow_html=True)
+                        # Guardar en Supabase
+                        if guardar_prediccion(nombre_paciente, probabilidad, fecha_hora):
+                            st.markdown("---")
+                            if probabilidad > 0.5:
+                                st.error(f"🧠 **Probabilidad de Parkinson detectada: {probabilidad*100:.2f}%**")
+                                st.info(f"📅 Análisis realizado el {fecha_hora}")
+                            else:
+                                st.success(f"✅ **Imagen saludable detectada: {(1 - probabilidad)*100:.2f}%**")
+                                st.info(f"📅 Análisis realizado el {fecha_hora}")
+                            
+                            st.success("💾 Predicción guardada en la base de datos")
+                            st.markdown("---")
+                            st.markdown("**Nota:** Este resultado es orientativo y no sustituye una evaluación médica profesional.", unsafe_allow_html=True)
     
     with col2:
         st.markdown("### 📋 Instrucciones")
@@ -209,7 +229,7 @@ if pagina == "🔍 Análisis":
         st.markdown("""
         - **Espirales:** Patrones de dibujo en espiral
         - **Ondas:** Trazos ondulados
-        - Los resultados se guardan automáticamente
+        - Los resultados se guardan automáticamente en la nube
         """)
 
 # ==================== PÁGINA DE HISTORIAL CON LOGIN ====================
@@ -286,10 +306,10 @@ elif pagina == "📊 Historial / Panel Admin":
                     st.markdown("<br>", unsafe_allow_html=True)
                     if st.button("🗑️ Limpiar historial", type="secondary"):
                         if st.session_state.get('confirmar_limpieza_hist'):
-                            limpiar_historial()
-                            st.session_state['confirmar_limpieza_hist'] = False
-                            st.success("✅ Historial limpiado")
-                            st.rerun()
+                            if limpiar_historial():
+                                st.session_state['confirmar_limpieza_hist'] = False
+                                st.success("✅ Historial limpiado")
+                                st.rerun()
                         else:
                             st.session_state['confirmar_limpieza_hist'] = True
                             st.warning("⚠️ Clic nuevamente para confirmar")
@@ -425,7 +445,7 @@ elif pagina == "📊 Historial / Panel Admin":
                 # Últimos análisis
                 st.markdown("### 🕐 Últimos 5 Análisis")
                 historial = obtener_historial()
-                ultimos = historial[-5:][::-1]
+                ultimos = historial[-5:][::-1] if len(historial) >= 5 else historial[::-1]
                 
                 for pred in ultimos:
                     color = "#ff4b4b" if pred['probabilidad'] > 0.5 else "#00cc00"
@@ -434,22 +454,8 @@ elif pagina == "📊 Historial / Panel Admin":
                         <strong>{pred['nombre']}</strong> - {pred['fecha_hora']} - <strong>{pred['probabilidad']*100:.2f}%</strong>
                     </div>
                     """, unsafe_allow_html=True)
-                
-                st.markdown("---")
-                
-                # Exportar JSON
-                st.markdown("### 💾 Exportar Datos Completos")
-                historial_completo = obtener_historial()
-                if historial_completo:
-                    historial_json = json.dumps(historial_completo, indent=2, ensure_ascii=False)
-                    st.download_button(
-                        label="📥 Exportar datos (JSON)",
-                        data=historial_json,
-                        file_name=f"datos_completos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                        mime="application/json"
-                    )
 
 # Footer
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🏥 Información")
-st.sidebar.info("Esta aplicación utiliza inteligencia artificial para detectar indicadores de Parkinson en trazos de escritura. Los resultados son orientativos.")
+st.sidebar.info("Esta aplicación utiliza inteligencia artificial para detectar indicadores de Parkinson en trazos de escritura. Los datos se guardan de forma segura en la nube.")
