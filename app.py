@@ -154,47 +154,11 @@ if st.session_state['autenticado']:
         cerrar_sesion()
         st.rerun()
 
-# Opciones de navegación según el estado de autenticación
-if st.session_state['autenticado']:
-    pagina = st.sidebar.radio("Ir a:", ["🔍 Análisis", "📊 Historial", "👤 Panel Admin"])
-else:
-    pagina = st.sidebar.radio("Ir a:", ["🔍 Análisis", "📊 Historial", "🔐 Iniciar Sesión"])
-
-# ==================== PÁGINA DE LOGIN ====================
-if pagina == "🔐 Iniciar Sesión":
-    st.markdown("<h1 style='text-align: center; color: #4B8BBE;'>🔐 Acceso Administrador</h1>", unsafe_allow_html=True)
-    st.markdown("---")
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        st.markdown("### 🔑 Credenciales de acceso")
-        
-        password_input = st.text_input("Contraseña:", type="password", placeholder="Ingresa la contraseña")
-        
-        col_btn1, col_btn2 = st.columns(2)
-        
-        with col_btn1:
-            if st.button("🔓 Iniciar Sesión", type="primary", use_column_width=True):
-                if password_input:
-                    if iniciar_sesion(password_input):
-                        st.success("✅ ¡Acceso concedido!")
-                        st.balloons()
-                        st.rerun()
-                    else:
-                        st.error("❌ Contraseña incorrecta")
-                else:
-                    st.warning("⚠️ Por favor ingresa una contraseña")
-        
-        with col_btn2:
-            if st.button("🔙 Volver", use_column_width=True):
-                st.rerun()
-        
-        st.markdown("---")
-        st.info("💡 **Nota:** Esta sección es solo para administradores del sistema.")
+# Opciones de navegación
+pagina = st.sidebar.radio("Ir a:", ["🔍 Análisis", "📊 Historial / Panel Admin"])
 
 # ==================== PÁGINA DE ANÁLISIS ====================
-elif pagina == "🔍 Análisis":
+if pagina == "🔍 Análisis":
     st.markdown("<h1 style='text-align: center; color: #4B8BBE;'>🧠 Detección de Parkinson</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Sube una imagen de trazo para predecir la probabilidad de Parkinson.</p>", unsafe_allow_html=True)
     st.markdown("---")
@@ -209,7 +173,7 @@ elif pagina == "🔍 Análisis":
             imagen = Image.open(imagen_subida)
             st.image(imagen, caption='Imagen cargada', use_column_width=True)
             
-            if st.button("🔍 Predecir", type="primary", use_column_width=True):
+            if st.button("🔍 Predecir", type="primary"):
                 if not nombre_paciente:
                     st.warning("⚠️ Por favor ingresa el nombre del paciente antes de predecir.")
                 else:
@@ -248,214 +212,233 @@ elif pagina == "🔍 Análisis":
         - Los resultados se guardan automáticamente
         """)
 
-# ==================== PÁGINA DE HISTORIAL ====================
-elif pagina == "📊 Historial":
-    st.markdown("<h1 style='text-align: center; color: #4B8BBE;'>📊 Historial de Predicciones</h1>", unsafe_allow_html=True)
-    st.markdown("---")
+# ==================== PÁGINA DE HISTORIAL CON LOGIN ====================
+elif pagina == "📊 Historial / Panel Admin":
     
-    historial = obtener_historial()
-    
-    if len(historial) == 0:
-        st.info("📭 No hay predicciones guardadas aún. Realiza tu primer análisis en la pestaña '🔍 Análisis'.")
-    else:
-        col1, col2, col3, col4 = st.columns(4)
-        
-        total_analisis = len(historial)
-        total_parkinson = sum(1 for p in historial if p['probabilidad'] > 0.5)
-        total_saludable = total_analisis - total_parkinson
-        prob_promedio = sum(p['probabilidad'] for p in historial) / total_analisis
-        
-        with col1:
-            st.metric("📈 Total de análisis", total_analisis)
-        with col2:
-            st.metric("🔴 Parkinson detectado", total_parkinson)
-        with col3:
-            st.metric("🟢 Saludables", total_saludable)
-        with col4:
-            st.metric("📊 Prob. promedio", f"{prob_promedio*100:.1f}%")
-        
-        st.markdown("---")
-        
-        col_filtro, col_boton = st.columns([3, 1])
-        
-        with col_filtro:
-            filtro = st.selectbox("🔍 Filtrar por resultado:", 
-                                 ["Todos", "Parkinson detectado", "Saludable"])
-        
-        with col_boton:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🗑️ Limpiar historial", type="secondary"):
-                limpiar_historial()
-                st.rerun()
-        
-        historial_invertido = historial[::-1]
-        
-        st.markdown("### 📋 Registro de análisis")
-        
-        for idx, prediccion in enumerate(historial_invertido):
-            if filtro == "Parkinson detectado" and prediccion['probabilidad'] <= 0.5:
-                continue
-            elif filtro == "Saludable" and prediccion['probabilidad'] > 0.5:
-                continue
-            
-            if prediccion['probabilidad'] > 0.5:
-                color_borde = "#ff4b4b"
-                icono = "🔴"
-            else:
-                color_borde = "#00cc00"
-                icono = "🟢"
-            
-            with st.container():
-                st.markdown(f"""
-                <div style='padding: 15px; border-left: 5px solid {color_borde}; background-color: #f0f2f6; border-radius: 5px; margin-bottom: 10px;'>
-                    <p style='margin: 0; font-size: 18px;'><strong>{icono} {prediccion['nombre']}</strong></p>
-                    <p style='margin: 5px 0; color: #666;'>📅 {prediccion['fecha_hora']}</p>
-                    <p style='margin: 5px 0;'><strong>Resultado:</strong> {prediccion['resultado']}</p>
-                    <p style='margin: 5px 0;'><strong>Probabilidad de Parkinson:</strong> {prediccion['probabilidad']*100:.2f}%</p>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        st.markdown("### 💾 Exportar datos")
-        
-        historial_texto = "HISTORIAL DE PREDICCIONES - DETECTOR DE PARKINSON\n"
-        historial_texto += "=" * 60 + "\n\n"
-        
-        for pred in historial_invertido:
-            historial_texto += f"Paciente: {pred['nombre']}\n"
-            historial_texto += f"Fecha: {pred['fecha_hora']}\n"
-            historial_texto += f"Resultado: {pred['resultado']}\n"
-            historial_texto += f"Probabilidad: {pred['probabilidad']*100:.2f}%\n"
-            historial_texto += "-" * 60 + "\n\n"
-        
-        st.download_button(
-            label="📥 Descargar historial (TXT)",
-            data=historial_texto,
-            file_name=f"historial_parkinson_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-            mime="text/plain"
-        )
-
-# ==================== PANEL ADMIN ====================
-elif pagina == "👤 Panel Admin":
+    # Si NO está autenticado, mostrar formulario de login
     if not st.session_state['autenticado']:
-        st.warning("⚠️ Debes iniciar sesión para acceder al panel de administración.")
-        st.info("👉 Ve a la sección '🔐 Iniciar Sesión' en el menú lateral.")
+        st.markdown("<h1 style='text-align: center; color: #4B8BBE;'>🔐 Acceso al Historial</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>Ingresa la contraseña para acceder al historial y panel de administración</p>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        
+        with col2:
+            st.markdown("### 🔑 Autenticación requerida")
+            
+            password_input = st.text_input("Contraseña:", type="password", placeholder="Ingresa la contraseña de administrador")
+            
+            if st.button("🔓 Acceder", type="primary"):
+                if password_input:
+                    if iniciar_sesion(password_input):
+                        st.success("✅ ¡Acceso concedido!")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("❌ Contraseña incorrecta")
+                else:
+                    st.warning("⚠️ Por favor ingresa una contraseña")
+            
+            st.markdown("---")
+            st.info("💡 **Nota:** Solo el personal autorizado puede acceder al historial de pacientes.")
+    
+    # Si está autenticado, mostrar el contenido con tabs
     else:
         st.markdown("<h1 style='text-align: center; color: #4B8BBE;'>👤 Panel de Administración</h1>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align: center;'>Bienvenido, {st.session_state['usuario_actual']}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
-        stats = obtener_estadisticas_avanzadas()
+        # Crear tabs para organizar el contenido
+        tab1, tab2 = st.tabs(["📊 Historial de Predicciones", "📈 Estadísticas Avanzadas"])
         
-        if stats is None:
-            st.info("📊 No hay datos disponibles aún. Espera a que se realicen análisis.")
-        else:
-            # Métricas principales
-            st.markdown("### 📊 Métricas Generales")
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("👥 Pacientes únicos", stats['pacientes_unicos'])
-            with col2:
-                st.metric("📈 Total análisis", stats['total_analisis'])
-            with col3:
-                st.metric("🔴 Casos positivos", stats['total_parkinson'])
-            with col4:
-                tasa_deteccion = (stats['total_parkinson'] / stats['total_analisis']) * 100
-                st.metric("📊 Tasa detección", f"{tasa_deteccion:.1f}%")
-            
-            st.markdown("---")
-            
-            # Estadísticas de probabilidades
-            st.markdown("### 🎯 Estadísticas de Probabilidad")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("📊 Promedio", f"{stats['prob_promedio']*100:.2f}%")
-            with col2:
-                st.metric("⬆️ Máxima", f"{stats['prob_maxima']*100:.2f}%")
-            with col3:
-                st.metric("⬇️ Mínima", f"{stats['prob_minima']*100:.2f}%")
-            
-            st.markdown("---")
-            
-            # Distribución por rangos
-            st.markdown("### 📊 Distribución por Rangos de Probabilidad")
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            rangos = stats['rangos']
-            
-            with col1:
-                st.markdown(f"""
-                <div style='padding: 20px; background-color: #d4edda; border-radius: 10px; text-align: center;'>
-                    <h3 style='color: #155724; margin: 0;'>0-25%</h3>
-                    <h2 style='color: #155724; margin: 10px 0;'>{rangos['0-25%']}</h2>
-                    <p style='color: #155724; margin: 0;'>Muy bajo riesgo</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"""
-                <div style='padding: 20px; background-color: #d1ecf1; border-radius: 10px; text-align: center;'>
-                    <h3 style='color: #0c5460; margin: 0;'>25-50%</h3>
-                    <h2 style='color: #0c5460; margin: 10px 0;'>{rangos['25-50%']}</h2>
-                    <p style='color: #0c5460; margin: 0;'>Bajo riesgo</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col3:
-                st.markdown(f"""
-                <div style='padding: 20px; background-color: #fff3cd; border-radius: 10px; text-align: center;'>
-                    <h3 style='color: #856404; margin: 0;'>50-75%</h3>
-                    <h2 style='color: #856404; margin: 10px 0;'>{rangos['50-75%']}</h2>
-                    <p style='color: #856404; margin: 0;'>Riesgo moderado</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col4:
-                st.markdown(f"""
-                <div style='padding: 20px; background-color: #f8d7da; border-radius: 10px; text-align: center;'>
-                    <h3 style='color: #721c24; margin: 0;'>75-100%</h3>
-                    <h2 style='color: #721c24; margin: 10px 0;'>{rangos['75-100%']}</h2>
-                    <p style='color: #721c24; margin: 0;'>Alto riesgo</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Últimos análisis
-            st.markdown("### 🕐 Últimos 5 Análisis")
+        # ==================== TAB 1: HISTORIAL ====================
+        with tab1:
             historial = obtener_historial()
-            ultimos = historial[-5:][::-1]
             
-            for pred in ultimos:
-                color = "#ff4b4b" if pred['probabilidad'] > 0.5 else "#00cc00"
-                st.markdown(f"""
-                <div style='padding: 10px; border-left: 4px solid {color}; background-color: #f8f9fa; border-radius: 5px; margin-bottom: 8px;'>
-                    <strong>{pred['nombre']}</strong> - {pred['fecha_hora']} - <strong>{pred['probabilidad']*100:.2f}%</strong>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Herramientas de administración
-            st.markdown("### 🔧 Herramientas de Administración")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("🗑️ Limpiar todo el historial", type="secondary", use_column_width=True):
-                    if st.session_state.get('confirmar_limpieza'):
-                        limpiar_historial()
-                        st.session_state['confirmar_limpieza'] = False
-                        st.success("✅ Historial limpiado correctamente")
-                        st.rerun()
+            if len(historial) == 0:
+                st.info("📭 No hay predicciones guardadas aún. Realiza tu primer análisis en la pestaña '🔍 Análisis'.")
+            else:
+                col1, col2, col3, col4 = st.columns(4)
+                
+                total_analisis = len(historial)
+                total_parkinson = sum(1 for p in historial if p['probabilidad'] > 0.5)
+                total_saludable = total_analisis - total_parkinson
+                prob_promedio = sum(p['probabilidad'] for p in historial) / total_analisis
+                
+                with col1:
+                    st.metric("📈 Total de análisis", total_analisis)
+                with col2:
+                    st.metric("🔴 Parkinson detectado", total_parkinson)
+                with col3:
+                    st.metric("🟢 Saludables", total_saludable)
+                with col4:
+                    st.metric("📊 Prob. promedio", f"{prob_promedio*100:.1f}%")
+                
+                st.markdown("---")
+                
+                col_filtro, col_boton = st.columns([3, 1])
+                
+                with col_filtro:
+                    filtro = st.selectbox("🔍 Filtrar por resultado:", 
+                                         ["Todos", "Parkinson detectado", "Saludable"])
+                
+                with col_boton:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("🗑️ Limpiar historial", type="secondary"):
+                        if st.session_state.get('confirmar_limpieza_hist'):
+                            limpiar_historial()
+                            st.session_state['confirmar_limpieza_hist'] = False
+                            st.success("✅ Historial limpiado")
+                            st.rerun()
+                        else:
+                            st.session_state['confirmar_limpieza_hist'] = True
+                            st.warning("⚠️ Clic nuevamente para confirmar")
+                
+                historial_invertido = historial[::-1]
+                
+                st.markdown("### 📋 Registro de análisis")
+                
+                for idx, prediccion in enumerate(historial_invertido):
+                    if filtro == "Parkinson detectado" and prediccion['probabilidad'] <= 0.5:
+                        continue
+                    elif filtro == "Saludable" and prediccion['probabilidad'] > 0.5:
+                        continue
+                    
+                    if prediccion['probabilidad'] > 0.5:
+                        color_borde = "#ff4b4b"
+                        icono = "🔴"
                     else:
-                        st.session_state['confirmar_limpieza'] = True
-                        st.warning("⚠️ Haz clic nuevamente para confirmar")
+                        color_borde = "#00cc00"
+                        icono = "🟢"
+                    
+                    with st.container():
+                        st.markdown(f"""
+                        <div style='padding: 15px; border-left: 5px solid {color_borde}; background-color: #f0f2f6; border-radius: 5px; margin-bottom: 10px;'>
+                            <p style='margin: 0; font-size: 18px;'><strong>{icono} {prediccion['nombre']}</strong></p>
+                            <p style='margin: 5px 0; color: #666;'>📅 {prediccion['fecha_hora']}</p>
+                            <p style='margin: 5px 0;'><strong>Resultado:</strong> {prediccion['resultado']}</p>
+                            <p style='margin: 5px 0;'><strong>Probabilidad de Parkinson:</strong> {prediccion['probabilidad']*100:.2f}%</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                st.markdown("### 💾 Exportar datos")
+                
+                historial_texto = "HISTORIAL DE PREDICCIONES - DETECTOR DE PARKINSON\n"
+                historial_texto += "=" * 60 + "\n\n"
+                
+                for pred in historial_invertido:
+                    historial_texto += f"Paciente: {pred['nombre']}\n"
+                    historial_texto += f"Fecha: {pred['fecha_hora']}\n"
+                    historial_texto += f"Resultado: {pred['resultado']}\n"
+                    historial_texto += f"Probabilidad: {pred['probabilidad']*100:.2f}%\n"
+                    historial_texto += "-" * 60 + "\n\n"
+                
+                st.download_button(
+                    label="📥 Descargar historial (TXT)",
+                    data=historial_texto,
+                    file_name=f"historial_parkinson_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain"
+                )
+        
+        # ==================== TAB 2: ESTADÍSTICAS ====================
+        with tab2:
+            stats = obtener_estadisticas_avanzadas()
             
-            with col2:
+            if stats is None:
+                st.info("📊 No hay datos disponibles aún. Espera a que se realicen análisis.")
+            else:
+                # Métricas principales
+                st.markdown("### 📊 Métricas Generales")
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("👥 Pacientes únicos", stats['pacientes_unicos'])
+                with col2:
+                    st.metric("📈 Total análisis", stats['total_analisis'])
+                with col3:
+                    st.metric("🔴 Casos positivos", stats['total_parkinson'])
+                with col4:
+                    tasa_deteccion = (stats['total_parkinson'] / stats['total_analisis']) * 100
+                    st.metric("📊 Tasa detección", f"{tasa_deteccion:.1f}%")
+                
+                st.markdown("---")
+                
+                # Estadísticas de probabilidades
+                st.markdown("### 🎯 Estadísticas de Probabilidad")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("📊 Promedio", f"{stats['prob_promedio']*100:.2f}%")
+                with col2:
+                    st.metric("⬆️ Máxima", f"{stats['prob_maxima']*100:.2f}%")
+                with col3:
+                    st.metric("⬇️ Mínima", f"{stats['prob_minima']*100:.2f}%")
+                
+                st.markdown("---")
+                
+                # Distribución por rangos
+                st.markdown("### 📊 Distribución por Rangos de Probabilidad")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                
+                rangos = stats['rangos']
+                
+                with col1:
+                    st.markdown(f"""
+                    <div style='padding: 20px; background-color: #d4edda; border-radius: 10px; text-align: center;'>
+                        <h3 style='color: #155724; margin: 0;'>0-25%</h3>
+                        <h2 style='color: #155724; margin: 10px 0;'>{rangos['0-25%']}</h2>
+                        <p style='color: #155724; margin: 0;'>Muy bajo riesgo</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown(f"""
+                    <div style='padding: 20px; background-color: #d1ecf1; border-radius: 10px; text-align: center;'>
+                        <h3 style='color: #0c5460; margin: 0;'>25-50%</h3>
+                        <h2 style='color: #0c5460; margin: 10px 0;'>{rangos['25-50%']}</h2>
+                        <p style='color: #0c5460; margin: 0;'>Bajo riesgo</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col3:
+                    st.markdown(f"""
+                    <div style='padding: 20px; background-color: #fff3cd; border-radius: 10px; text-align: center;'>
+                        <h3 style='color: #856404; margin: 0;'>50-75%</h3>
+                        <h2 style='color: #856404; margin: 10px 0;'>{rangos['50-75%']}</h2>
+                        <p style='color: #856404; margin: 0;'>Riesgo moderado</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col4:
+                    st.markdown(f"""
+                    <div style='padding: 20px; background-color: #f8d7da; border-radius: 10px; text-align: center;'>
+                        <h3 style='color: #721c24; margin: 0;'>75-100%</h3>
+                        <h2 style='color: #721c24; margin: 10px 0;'>{rangos['75-100%']}</h2>
+                        <p style='color: #721c24; margin: 0;'>Alto riesgo</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # Últimos análisis
+                st.markdown("### 🕐 Últimos 5 Análisis")
+                historial = obtener_historial()
+                ultimos = historial[-5:][::-1]
+                
+                for pred in ultimos:
+                    color = "#ff4b4b" if pred['probabilidad'] > 0.5 else "#00cc00"
+                    st.markdown(f"""
+                    <div style='padding: 10px; border-left: 4px solid {color}; background-color: #f8f9fa; border-radius: 5px; margin-bottom: 8px;'>
+                        <strong>{pred['nombre']}</strong> - {pred['fecha_hora']} - <strong>{pred['probabilidad']*100:.2f}%</strong>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # Exportar JSON
+                st.markdown("### 💾 Exportar Datos Completos")
                 historial_completo = obtener_historial()
                 if historial_completo:
                     historial_json = json.dumps(historial_completo, indent=2, ensure_ascii=False)
@@ -463,8 +446,7 @@ elif pagina == "👤 Panel Admin":
                         label="📥 Exportar datos (JSON)",
                         data=historial_json,
                         file_name=f"datos_completos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                        mime="application/json",
-                        use_column_width=True
+                        mime="application/json"
                     )
 
 # Footer
