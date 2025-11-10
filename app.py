@@ -6,6 +6,8 @@ from datetime import datetime
 import hashlib
 import os
 from supabase import create_client, Client
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # Configuración de la página
 st.set_page_config(
@@ -20,6 +22,14 @@ if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 if 'usuario_actual' not in st.session_state:
     st.session_state['usuario_actual'] = None
+if 'mostrar_feedback' not in st.session_state:
+    st.session_state['mostrar_feedback'] = False
+if 'ultimo_nombre' not in st.session_state:
+    st.session_state['ultimo_nombre'] = None
+if 'ultima_fecha' not in st.session_state:
+    st.session_state['ultima_fecha'] = None
+if 'ultimo_id_prediccion' not in st.session_state:
+    st.session_state['ultimo_id_prediccion'] = None
 
 # Credenciales de administrador
 ADMIN_PASSWORD = "12345678"
@@ -77,13 +87,28 @@ def guardar_prediccion(nombre, probabilidad, fecha_hora):
             "nombre": nombre,
             "probabilidad": float(probabilidad),
             "resultado": resultado,
-            "fecha_hora": fecha_hora
+            "fecha_hora": fecha_hora,
+            "feedback": None  # Inicialmente sin feedback
         }
         
         response = supabase.table("predicciones").insert(data).execute()
+        # Guardar el ID de la predicción para asociar feedback después
+        if response.data and len(response.data) > 0:
+            st.session_state['ultimo_id_prediccion'] = response.data[0]['id']
         return True
     except Exception as e:
         st.error(f"Error al guardar: {str(e)}")
+        return False
+
+def guardar_feedback(prediccion_id, feedback_texto):
+    """Actualiza el feedback de una predicción en Supabase"""
+    try:
+        response = supabase.table("predicciones").update(
+            {"feedback": feedback_texto}
+        ).eq("id", prediccion_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error al guardar feedback: {str(e)}")
         return False
 
 def obtener_historial():
@@ -203,6 +228,11 @@ if pagina == "🔍 Análisis":
                         
                         # Guardar en Supabase
                         if guardar_prediccion(nombre_paciente, probabilidad, fecha_hora):
+                            # Guardar datos para feedback
+                            st.session_state['ultimo_nombre'] = nombre_paciente
+                            st.session_state['ultima_fecha'] = fecha_hora
+                            st.session_state['mostrar_feedback'] = True
+                            
                             st.markdown("---")
                             if probabilidad > 0.5:
                                 st.error(f"🧠 **Probabilidad de Parkinson detectada: {probabilidad*100:.2f}%**")
@@ -214,6 +244,35 @@ if pagina == "🔍 Análisis":
                             st.success("💾 Predicción guardada en la base de datos")
                             st.markdown("---")
                             st.markdown("**Nota:** Este resultado es orientativo y no sustituye una evaluación médica profesional.", unsafe_allow_html=True)
+        
+        # === 🗣️ BLOQUE DE FEEDBACK DEL USUARIO ===
+        if st.session_state.get("mostrar_feedback", False):
+            st.markdown("---")
+            st.markdown("### 🗣️ Retroalimentación del usuario")
+            st.info("💡 Tu opinión nos ayuda a mejorar el sistema")
+            
+            col_fb1, col_fb2 = st.columns([1, 3])
+            with col_fb1:
+                feedback_correcto = st.radio(
+                    "¿Fue correcta la predicción?",
+                    ["👍 Sí", "👎 No"],
+                    horizontal=True
+                )
+            with col_fb2:
+                comentario = st.text_input(
+                    "Comentario opcional:",
+                    placeholder="Ej: El resultado fue preciso / Se requiere más análisis...",
+                    key="comentario_feedback"
+                )
+            
+            if st.button("📩 Enviar Feedback", type="primary"):
+                feedback_texto = f"{feedback_correcto} | {comentario if comentario else 'Sin comentario'}"
+                if st.session_state['ultimo_id_prediccion']:
+                    if guardar_feedback(st.session_state['ultimo_id_prediccion'], feedback_texto):
+                        st.success("✅ ¡Gracias por tu retroalimentación!")
+                        st.balloons()
+                        st.session_state["mostrar_feedback"] = False
+                        st.rerun()
     
     with col2:
         st.markdown("### 📋 Instrucciones")
@@ -222,7 +281,8 @@ if pagina == "🔍 Análisis":
         2. Sube una imagen clara del trazo
         3. Haz clic en 'Predecir'
         4. Revisa el resultado
-        5. Ve al historial para ver todos los análisis
+        5. Proporciona feedback (opcional)
+        6. Ve al historial para ver todos los análisis
         """)
         
         st.markdown("### ℹ️ Sobre la detección")
@@ -230,6 +290,7 @@ if pagina == "🔍 Análisis":
         - **Espirales:** Patrones de dibujo en espiral
         - **Ondas:** Trazos ondulados
         - Los resultados se guardan automáticamente en la nube
+        - Tu feedback mejora el sistema
         """)
 
 # ==================== PÁGINA DE HISTORIAL CON LOGIN ====================
@@ -269,7 +330,7 @@ elif pagina == "📊 Historial / Panel Admin":
         st.markdown("---")
         
         # Crear tabs para organizar el contenido
-        tab1, tab2 = st.tabs(["📊 Historial de Predicciones", "📈 Estadísticas Avanzadas"])
+        tab1, tab2, tab3 = st.tabs(["📊 Historial de Predicciones", "📈 Estadísticas y Drift", "💬 Feedback de Usuarios"])
         
         # ==================== TAB 1: HISTORIAL ====================
         with tab1:
@@ -361,7 +422,7 @@ elif pagina == "📊 Historial / Panel Admin":
                     mime="text/plain"
                 )
         
-        # ==================== TAB 2: ESTADÍSTICAS ====================
+        # ==================== TAB 2: ESTADÍSTICAS Y DRIFT ====================
         with tab2:
             stats = obtener_estadisticas_avanzadas()
             
@@ -440,6 +501,48 @@ elif pagina == "📊 Historial / Panel Admin":
                     </div>
                     """, unsafe_allow_html=True)
                 
+                # === 🔁 GRÁFICO DE EVOLUCIÓN TEMPORAL (DRIFT) ===
+                st.markdown("---")
+                st.markdown("### 📈 Evolución temporal de predicciones (Drift del modelo)")
+                
+                historial = obtener_historial()
+                if len(historial) < 2:
+                    st.info("📊 Aún no hay suficientes datos para graficar la evolución.")
+                else:
+                    df = pd.DataFrame(historial)
+                    df["fecha_hora"] = pd.to_datetime(df["fecha_hora"])
+                    df = df.sort_values("fecha_hora")
+                    df["promedio_movil"] = df["probabilidad"].rolling(window=3, min_periods=1).mean()
+
+                    fig, ax = plt.subplots(figsize=(10, 5))
+                    ax.scatter(df["fecha_hora"], df["probabilidad"], color="gray", alpha=0.6, s=50, label="Predicciones individuales")
+                    ax.plot(df["fecha_hora"], df["promedio_movil"], marker='o', linestyle='-', color='royalblue', linewidth=2, markersize=6, label="Promedio móvil (ventana=3)")
+                    ax.axhline(0.5, color='red', linestyle='--', linewidth=2, label='Umbral 50%')
+                    ax.set_title("Evolución de las predicciones en el tiempo", fontsize=14, fontweight='bold')
+                    ax.set_xlabel("Fecha y hora del análisis", fontsize=11)
+                    ax.set_ylabel("Probabilidad de Parkinson", fontsize=11)
+                    ax.legend(loc='best', fontsize=9)
+                    ax.grid(True, alpha=0.3, linestyle='--')
+                    plt.xticks(rotation=45, ha='right')
+                    plt.tight_layout()
+                    st.pyplot(fig)
+
+                    primeros = df["probabilidad"].head(3).mean()
+                    ultimos = df["probabilidad"].tail(3).mean()
+                    drift_valor = (ultimos - primeros) * 100
+
+                    if abs(drift_valor) < 5:
+                        estado = "✅ Sin drift significativo"
+                        color = "green"
+                    elif drift_valor > 5:
+                        estado = "⚠️ Posible aumento en detecciones de Parkinson"
+                        color = "orange"
+                    else:
+                        estado = "⚠️ Posible disminución en detecciones de Parkinson"
+                        color = "orange"
+
+                    st.markdown(f"<p style='color:{color};font-weight:bold;font-size:16px;'>📊 {estado} ({drift_valor:+.2f}% de variación promedio)</p>", unsafe_allow_html=True)
+                
                 st.markdown("---")
                 
                 # Últimos análisis
@@ -454,8 +557,39 @@ elif pagina == "📊 Historial / Panel Admin":
                         <strong>{pred['nombre']}</strong> - {pred['fecha_hora']} - <strong>{pred['probabilidad']*100:.2f}%</strong>
                     </div>
                     """, unsafe_allow_html=True)
-
-# Footer
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🏥 Información")
-st.sidebar.info("Esta aplicación utiliza inteligencia artificial para detectar indicadores de Parkinson en trazos de escritura. Los datos se guardan de forma segura en la nube.")
+        
+        # ==================== TAB 3: FEEDBACK DE USUARIOS ====================
+        with tab3:
+            st.markdown("### 💬 Retroalimentación de Usuarios")
+            
+            historial = obtener_historial()
+            feedback_data = [p for p in historial if p.get('feedback') and p['feedback'].strip()]
+            
+            if len(feedback_data) == 0:
+                st.info("📭 No se ha recibido feedback todavía.")
+            else:
+                # Estadísticas de feedback
+                positivos = sum(1 for f in feedback_data if "👍" in f['feedback'])
+                negativos = sum(1 for f in feedback_data if "👎" in f['feedback'])
+                total_fb = len(feedback_data)
+                
+                st.markdown("### 📊 Resumen de Feedback")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("📝 Total feedback", total_fb)
+                with col2:
+                    st.metric("✅ Predicciones correctas", f"{positivos} ({positivos/total_fb*100:.1f}%)")
+                with col3:
+                    st.metric("❌ Predicciones incorrectas", f"{negativos} ({negativos/total_fb*100:.1f}%)")
+                
+                st.markdown("---")
+                st.markdown("### 💭 Comentarios recibidos")
+                
+                for fb in reversed(feedback_data):
+                    icono = "👍" if "👍" in fb["feedback"] else "👎"
+                    color = "#28a745" if "👍" in fb["feedback"] else "#dc3545"
+                    
+                    # Extraer comentario
+                    partes = fb["feedback"].split("|")
+                    comentario = par
