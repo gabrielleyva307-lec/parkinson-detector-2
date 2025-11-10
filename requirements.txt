@@ -2,5 +2,6 @@ streamlit==1.28.1
 tensorflow==2.18.0
 pillow
 numpy
+pandas
+matplotlib
 supabase==2.10.0
-
