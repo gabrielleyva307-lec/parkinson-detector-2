@@ -590,6 +590,50 @@ elif pagina == "📊 Historial / Panel Admin":
                     icono = "👍" if "👍" in fb["feedback"] else "👎"
                     color = "#28a745" if "👍" in fb["feedback"] else "#dc3545"
                     
-                    # Extraer comentario
+                    # Extraer comentario del feedback
+                    try:
+                        partes = fb["feedback"].split("|")
+                        comentario = partes[1].strip() if len(partes) > 1 else "Sin comentario adicional."
+                    except:
+                        comentario = fb["feedback"]
+                    
+                    st.markdown(f"""
+                    <div style='padding:15px; border-left:5px solid {color}; background-color:#f8f9fa; border-radius:5px; margin-bottom:15px;'>
+                        <p style='margin: 0; font-size: 16px;'><strong>{icono} {fb['nombre']}</strong></p>
+                        <p style='margin: 5px 0; color: #666;'>📅 {fb['fecha_hora']}</p>
+                        <p style='margin: 5px 0;'><strong>Probabilidad:</strong> {fb['probabilidad']*100:.2f}%</p>
+                        <p style='margin: 5px 0;'><strong>Resultado:</strong> {fb['resultado']}</p>
+                        <p style='margin: 10px 0; padding: 10px; background-color: white; border-radius: 5px;'><em>"{comentario}"</em></p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # Descargar feedback
+                st.markdown("### 💾 Exportar Feedback")
+                feedback_texto = "RETROALIMENTACIÓN DE USUARIOS - DETECTOR DE PARKINSON\n"
+                feedback_texto += "=" * 70 + "\n\n"
+                
+                for fb in reversed(feedback_data):
                     partes = fb["feedback"].split("|")
-                    comentario = par
+                    tipo_fb = "CORRECTO" if "👍" in partes[0] else "INCORRECTO"
+                    comentario = partes[1].strip() if len(partes) > 1 else "Sin comentario"
+                    
+                    feedback_texto += f"Paciente: {fb['nombre']}\n"
+                    feedback_texto += f"Fecha: {fb['fecha_hora']}\n"
+                    feedback_texto += f"Predicción: {fb['resultado']} ({fb['probabilidad']*100:.2f}%)\n"
+                    feedback_texto += f"Feedback: {tipo_fb}\n"
+                    feedback_texto += f"Comentario: {comentario}\n"
+                    feedback_texto += "-" * 70 + "\n\n"
+                
+                st.download_button(
+                    label="📥 Descargar feedback (TXT)",
+                    data=feedback_texto,
+                    file_name=f"feedback_parkinson_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain"
+                )
+
+# Footer
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🏥 Información")
+st.sidebar.info("Esta aplicación utiliza inteligencia artificial para detectar indicadores de Parkinson en trazos de escritura. Los datos se guardan de forma segura en la nube.")
